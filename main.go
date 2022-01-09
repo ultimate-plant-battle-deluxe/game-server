@@ -17,16 +17,25 @@ func RandomInt(min int, max int) int {
 	return rand.Intn(max-min+1) + min
 }
 
+type Plant struct {
+	Kind int
+}
+type Garden struct {
+	Plants []Plant `json:"plants"`
+}
+
 type GameState struct {
 	Id uuid.UUID `json:"id"`
 	Time int `json:"time"`
 	Items []int `json:"items"`
+	Gardens []Garden `json:"gardens"`
 }
 
 var ItemOdds []int = []int{
 	1000, // Leaf
 	1000, // Water
-	250, // Seed
+	500, // Seed
+	100, // Trowel
 }
 
 func rollItem() int {
@@ -113,6 +122,21 @@ func consume(w http.ResponseWriter, req *http.Request) {
 func plant(w http.ResponseWriter, req *http.Request) {
 
 }
+func garden(w http.ResponseWriter, req *http.Request) {
+	gameState := parseStateToken(req)
+	defer writeStateToken(w, gameState)
+
+	if gameState.Time < 3 {
+		return
+	}
+	
+	gameState.Time -= 3
+	gameState.Items = []int{}
+	for i := 0; i < 3; i++ {
+		gameState.Items = append(gameState.Items, rollItem())
+	}
+	gameState.Gardens = append(gameState.Gardens, Garden{})
+}
 func battle(w http.ResponseWriter, req *http.Request) {
 
 }
@@ -133,6 +157,7 @@ func main() {
     http.HandleFunc("/v1/roll", roll)
     http.HandleFunc("/v1/consume", consume)
     http.HandleFunc("/v1/plant", plant)
+    http.HandleFunc("/v1/garden", garden)
     http.HandleFunc("/v1/battle", battle)
 
     http.ListenAndServe(":8080", nil)
