@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math/rand"
 	"net/http"
+	"strconv"
 	"time"
 
 	b64 "encoding/base64"
@@ -17,11 +18,20 @@ func RandomInt(min int, max int) int {
 	return rand.Intn(max-min+1) + min
 }
 
+type ItemKind int
+const (
+	ItemLeaf ItemKind = iota
+	ItemWater
+	ItemSeedsBasic
+	ItemTrowel
+)
+
 type Plant struct {
 	Kind int
 }
 type Garden struct {
 	Plants []Plant `json:"plants"`
+	Water int `json:"water"`
 }
 
 type GameState struct {
@@ -94,10 +104,13 @@ func start(w http.ResponseWriter, req *http.Request) {
 		Id: uuid.NewV4(),
 		Time: 10,
 		Items: []int{},
+		Gardens: []Garden{},
 	}
 	for i := 0; i < 3; i++ {
 		gameState.Items = append(gameState.Items, rollItem())
 	}
+
+	gameState.Gardens = append(gameState.Gardens, Garden{})
 
 	writeStateToken(w, gameState)
 }
@@ -119,8 +132,79 @@ func roll(w http.ResponseWriter, req *http.Request) {
 func consume(w http.ResponseWriter, req *http.Request) {
 
 }
-func plant(w http.ResponseWriter, req *http.Request) {
+func water(w http.ResponseWriter, req *http.Request) {
+	gameState := parseStateToken(req)
+	defer writeStateToken(w, gameState)
 
+	gardenId, err := strconv.ParseInt(req.URL.Query().Get("gardenId"), 10, 64)
+	if err != nil {
+		fmt.Println("Strconv err", err);
+		return
+	}
+
+	if gardenId < 0 || gardenId > int64(len(gameState.Gardens)-1) {
+		return
+	}
+
+	if gameState.Time < 2 {
+		return
+	}
+	
+	var hasWater bool
+	for _, item := range gameState.Items {
+		if item == int(ItemWater) {
+			hasWater = true
+			break
+		}
+	}
+
+	if !hasWater {
+		return
+	}
+
+	gameState.Time -= 2
+	gameState.Gardens[gardenId].Water += 1
+	gameState.Items = []int{}
+	for i := 0; i < 3; i++ {
+		gameState.Items = append(gameState.Items, rollItem())
+	}
+}
+func plant(w http.ResponseWriter, req *http.Request) {
+	gameState := parseStateToken(req)
+	defer writeStateToken(w, gameState)
+
+	gardenId, err := strconv.ParseInt(req.URL.Query().Get("gardenId"), 10, 64)
+	if err != nil {
+		fmt.Println("Strconv err", err);
+		return
+	}
+
+	if gardenId < 0 || gardenId > int64(len(gameState.Gardens)-1) {
+		return
+	}
+
+	if gameState.Time < 2 {
+		return
+	}
+	
+	var hasSeed bool
+	for _, item := range gameState.Items {
+		if item == int(ItemSeedsBasic) {
+			hasSeed = true
+			break
+		}
+	}
+
+	if !hasSeed {
+		return
+	}
+
+	gameState.Time -= 2
+	gameState.Gardens[gardenId].Plants = append(gameState.Gardens[gardenId].Plants, Plant{Kind: 0})
+	gameState.Items = []int{}
+	for i := 0; i < 3; i++ {
+		gameState.Items = append(gameState.Items, rollItem())
+	}
 }
 func garden(w http.ResponseWriter, req *http.Request) {
 	gameState := parseStateToken(req)
@@ -158,6 +242,7 @@ func main() {
     http.HandleFunc("/v1/consume", consume)
     http.HandleFunc("/v1/plant", plant)
     http.HandleFunc("/v1/garden", garden)
+    http.HandleFunc("/v1/water", water)
     http.HandleFunc("/v1/battle", battle)
 
     http.ListenAndServe(":8080", nil)
